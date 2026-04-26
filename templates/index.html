@@ -6,203 +6,65 @@
   <title>Heart Rate Monitor — rPPG</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:       #06060f;
-      --surface:  #0d0d1e;
-      --border:   #1a1a35;
-      --text:     #dde2f4;
-      --muted:    #3c3c60;
-      --green:    #10b981;
-      --blue:     #3b82f6;
-      --amber:    #f59e0b;
-      --red:      #ef4444;
+      --bg: #06060f; --surface: #0d0d1e; --border: #1a1a35;
+      --text: #dde2f4; --muted: #3c3c60;
+      --green: #10b981; --blue: #3b82f6; --amber: #f59e0b; --red: #ef4444;
     }
-
     body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: ui-monospace, 'SF Mono', 'Fira Code', Consolas, monospace;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 16px 16px 24px;
-      gap: 14px;
+      background: var(--bg); color: var(--text);
+      font-family: ui-monospace,'SF Mono','Fira Code',Consolas,monospace;
+      min-height: 100dvh; display: flex; flex-direction: column;
+      align-items: center; padding: 16px 16px 24px; gap: 14px;
     }
-
-    /* ── Header ── */
-    header {
-      width: 100%;
-      max-width: 800px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
+    header { width:100%; max-width:800px; display:flex; align-items:center; gap:10px; }
     .pulse-dot {
-      width: 9px; height: 9px;
-      border-radius: 50%;
-      background: var(--red);
-      flex-shrink: 0;
-      animation: throb 1.4s ease-in-out infinite;
+      width:9px; height:9px; border-radius:50%; background:var(--red); flex-shrink:0;
+      animation:throb 1.4s ease-in-out infinite;
     }
     @keyframes throb {
-      0%,100% { opacity:1; transform:scale(1);   box-shadow:0 0 0 0   rgba(239,68,68,.5); }
-      50%     { opacity:.6; transform:scale(.8);  box-shadow:0 0 0 5px rgba(239,68,68,0); }
+      0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 rgba(239,68,68,.5);}
+      50%{opacity:.6;transform:scale(.8);box-shadow:0 0 0 5px rgba(239,68,68,0);}
+    }
+    header h1{font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+    .header-tag{margin-left:auto;font-size:11px;color:#252540;white-space:nowrap;}
+
+    #cam-wrap{
+      position:relative;width:100%;max-width:800px;aspect-ratio:4/3;
+      background:var(--surface);border-radius:14px;overflow:hidden;border:1px solid var(--border);
+    }
+    #video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);visibility:hidden;}
+    /* Canvas NOT CSS-mirrored — we flip coords in JS */
+    #overlay{position:absolute;inset:0;width:100%;height:100%;}
+
+    #start-screen{
+      position:absolute;inset:0;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:20px;background:var(--surface);z-index:10;
+    }
+    .cam-emoji{font-size:54px;opacity:.25;line-height:1;}
+    #start-btn{
+      display:inline-flex;align-items:center;gap:8px;padding:12px 30px;
+      background:var(--blue);color:#fff;border:none;border-radius:9px;
+      font:600 14px/1 ui-monospace,monospace;letter-spacing:.05em;cursor:pointer;transition:background .15s,transform .1s;
+    }
+    #start-btn:hover{background:#2563eb;} #start-btn:active{transform:scale(.97);}
+    .start-note{font-size:12px;color:#303050;max-width:300px;text-align:center;line-height:1.65;}
+
+    #debug-bar{
+      width:100%;max-width:800px;background:#0a0a18;border:1px solid #1a1a30;
+      border-radius:8px;padding:8px 14px;font-size:11px;color:#505070;
+      display:none;min-height:32px;word-break:break-all;
     }
 
-    header h1 {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
+    #stats{width:100%;max-width:800px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px 18px;}
+    .card-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px;}
+    .card-val{font-size:18px;font-weight:700;color:#c0c4dc;line-height:1.2;transition:color .4s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
-    .header-tag {
-      margin-left: auto;
-      font-size: 11px;
-      color: #252540;
-      white-space: nowrap;
-    }
-
-    /* ── Camera container ── */
-    #cam-wrap {
-      position: relative;
-      width: 100%;
-      max-width: 800px;
-      aspect-ratio: 4/3;
-      background: var(--surface);
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-
-    #video {
-      width: 100%; height: 100%;
-      object-fit: cover;
-      display: block;
-      transform: scaleX(-1);   /* mirror for natural selfie feel */
-      visibility: hidden;
-    }
-
-    /* Canvas mirrors video so backend coords map 1-to-1 */
-    #overlay {
-      position: absolute;
-      inset: 0;
-      width: 100%; height: 100%;
-      transform: scaleX(-1);
-    }
-
-    /* ── Start screen ── */
-    #start-screen {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 20px;
-      background: var(--surface);
-      z-index: 10;
-    }
-
-    .cam-emoji { font-size: 54px; opacity: .25; line-height: 1; }
-
-    #start-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 30px;
-      background: var(--blue);
-      color: #fff;
-      border: none;
-      border-radius: 9px;
-      font: 600 14px/1 ui-monospace, monospace;
-      letter-spacing: .05em;
-      cursor: pointer;
-      transition: background .15s, transform .1s;
-    }
-    #start-btn:hover  { background: #2563eb; }
-    #start-btn:active { transform: scale(.97); }
-
-    .start-note {
-      font-size: 12px;
-      color: #303050;
-      max-width: 300px;
-      text-align: center;
-      line-height: 1.65;
-    }
-
-    /* ── Stat cards row ── */
-    #stats {
-      width: 100%;
-      max-width: 800px;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 11px;
-      padding: 14px 18px;
-    }
-
-    .card-lbl {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-
-    .card-val {
-      font-size: 18px;
-      font-weight: 700;
-      color: #c0c4dc;
-      line-height: 1.2;
-      transition: color .4s;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    #stat-bpm { font-size: 38px; }
-
-    /* ── Waveform card ── */
-    #wave-wrap {
-      width: 100%;
-      max-width: 800px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 11px;
-      overflow: hidden;
-    }
-
-    #wave-header {
-      padding: 10px 16px 0;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--muted);
-    }
-
-    #wave-canvas {
-      display: block;
-      width: 100%;
-      height: 90px;
-    }
-
-    /* ── Footer ── */
-    footer {
-      font-size: 11px;
-      color: #1e1e38;
-      text-align: center;
-      margin-top: auto;
-    }
+    #wave-wrap{width:100%;max-width:800px;background:var(--surface);border:1px solid var(--border);border-radius:11px;overflow:hidden;}
+    #wave-header{padding:10px 16px 0;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);}
+    #wave-canvas{display:block;width:100%;height:90px;}
+    footer{font-size:11px;color:#1e1e38;text-align:center;margin-top:auto;}
   </style>
 </head>
 <body>
@@ -216,30 +78,19 @@
 <div id="cam-wrap">
   <video id="video" autoplay muted playsinline></video>
   <canvas id="overlay"></canvas>
-
   <div id="start-screen">
     <div class="cam-emoji">📷</div>
     <button id="start-btn">▶&nbsp; Enable Camera</button>
-    <p class="start-note">
-      Your webcam detects subtle colour changes in your skin to estimate heart rate.
-      No video is stored or transmitted to anyone.
-    </p>
+    <p class="start-note">Your webcam detects subtle colour changes in your skin to estimate heart rate. No video is stored.</p>
   </div>
 </div>
 
+<div id="debug-bar"></div>
+
 <div id="stats">
-  <div class="card">
-    <div class="card-lbl">Heart Rate</div>
-    <div class="card-val" id="stat-bpm" style="color:var(--muted)">--</div>
-  </div>
-  <div class="card">
-    <div class="card-lbl">Status</div>
-    <div class="card-val" id="stat-status" style="font-size:15px;color:var(--muted)">Starting…</div>
-  </div>
-  <div class="card">
-    <div class="card-lbl">Algorithm</div>
-    <div class="card-val" id="stat-algo" style="font-size:15px;color:var(--muted)">--</div>
-  </div>
+  <div class="card"><div class="card-lbl">Heart Rate</div><div class="card-val" id="stat-bpm" style="font-size:38px;color:var(--muted)">--</div></div>
+  <div class="card"><div class="card-lbl">Status</div><div class="card-val" id="stat-status" style="font-size:15px;color:var(--muted)">Waiting…</div></div>
+  <div class="card"><div class="card-lbl">Algorithm</div><div class="card-val" id="stat-algo" style="font-size:15px;color:var(--muted)">--</div></div>
 </div>
 
 <div id="wave-wrap">
@@ -250,316 +101,170 @@
 <footer>Remote Photoplethysmography · Heart rate from skin-colour fluctuations</footer>
 
 <script>
-// ── Elements ──────────────────────────────────────────────────────────────────
-const video      = document.getElementById('video');
-const overlay    = document.getElementById('overlay');
-const oc         = overlay.getContext('2d');
-const startScr   = document.getElementById('start-screen');
-const startBtn   = document.getElementById('start-btn');
-const statBpm    = document.getElementById('stat-bpm');
-const statStatus = document.getElementById('stat-status');
-const statAlgo   = document.getElementById('stat-algo');
-const waveCanvas = document.getElementById('wave-canvas');
-const wc         = waveCanvas.getContext('2d');
+const video=document.getElementById('video'),overlay=document.getElementById('overlay');
+const oc=overlay.getContext('2d');
+const startScr=document.getElementById('start-screen'),startBtn=document.getElementById('start-btn');
+const statBpm=document.getElementById('stat-bpm'),statStatus=document.getElementById('stat-status'),statAlgo=document.getElementById('stat-algo');
+const waveCanvas=document.getElementById('wave-canvas'),wc=waveCanvas.getContext('2d');
+const debugBar=document.getElementById('debug-bar');
 
-// ── Session ID ────────────────────────────────────────────────────────────────
-const SID_KEY = 'rppg_session_id';
-let sid = sessionStorage.getItem(SID_KEY);
-if (!sid) {
-  sid = 'sid_' + Math.random().toString(36).slice(2,11);
-  sessionStorage.setItem(SID_KEY, sid);
-}
+let sid=sessionStorage.getItem('rppg_sid');
+if(!sid){sid='sid_'+Math.random().toString(36).slice(2,11);sessionStorage.setItem('rppg_sid',sid);}
 
-// ── Capture canvas (un-mirrored, sent to backend) ─────────────────────────────
-const cap = document.createElement('canvas');
-cap.width = 640; cap.height = 480;
-const cc  = cap.getContext('2d');
+const cap=document.createElement('canvas');cap.width=640;cap.height=480;
+const cc=cap.getContext('2d');
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let latest     = null;   // last backend response
-let sending    = false;
-let cameraOn   = false;
+let latest=null,sending=false,loopStarted=false,frameCount=0;
 
-// ── Camera start ──────────────────────────────────────────────────────────────
-startBtn.addEventListener('click', async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width:{ideal:640}, height:{ideal:480}, facingMode:'user' }
-    });
-    video.srcObject = stream;
-    video.style.visibility = 'visible';
-    startScr.style.display  = 'none';
-    cameraOn = true;
+function dbg(msg,col){debugBar.style.display='block';debugBar.style.color=col||'#505070';debugBar.textContent=msg;}
 
-    video.addEventListener('loadedmetadata', () => {
-      overlay.width  = video.videoWidth;
-      overlay.height = video.videoHeight;
-      sizeWave();
-      requestAnimationFrame(drawLoop);
-      startSendLoop();
-    }, {once:true});
-
-  } catch (e) {
-    startBtn.textContent = '⚠ Camera denied — refresh & allow access';
-    startBtn.style.background = '#7f1d1d';
+startBtn.addEventListener('click',async()=>{
+  startBtn.disabled=true;startBtn.textContent='Requesting camera…';
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}});
+    video.srcObject=stream;video.style.visibility='visible';startScr.style.display='none';
+    dbg('Camera granted — waiting for video dimensions…');
+    waitForVideo();
+  }catch(e){
+    startBtn.disabled=false;startBtn.style.background='#7f1d1d';
+    startBtn.textContent='⚠ Camera denied — refresh & allow';
+    dbg('Camera error: '+e.message,'#ef4444');
   }
 });
 
-// ── Wave canvas sizing ─────────────────────────────────────────────────────────
-function sizeWave() {
-  const r = waveCanvas.getBoundingClientRect();
-  waveCanvas.width  = Math.max(1, Math.floor(r.width));
-  waveCanvas.height = Math.max(1, Math.floor(r.height));
+function waitForVideo(){
+  if(video.videoWidth>0&&video.videoHeight>0){setup();return;}
+  let done=false;
+  const go=()=>{if(done)return;done=true;setup();};
+  video.addEventListener('loadedmetadata',go,{once:true});
+  video.addEventListener('playing',go,{once:true});
+  const poll=setInterval(()=>{if(video.videoWidth>0){clearInterval(poll);go();}},200);
 }
+
+function setup(){
+  const W=video.videoWidth||640,H=video.videoHeight||480;
+  overlay.width=W;overlay.height=H;
+  dbg(`Video ready ${W}×${H} — sending frames…`);
+  sizeWave();
+  if(!loopStarted){loopStarted=true;requestAnimationFrame(drawLoop);startSendLoop();}
+}
+
+function sizeWave(){const r=waveCanvas.getBoundingClientRect();waveCanvas.width=Math.max(1,Math.floor(r.width));waveCanvas.height=Math.max(1,Math.floor(r.height));}
 new ResizeObserver(sizeWave).observe(waveCanvas);
 
-// ── Send loop (10 fps) ─────────────────────────────────────────────────────────
-function startSendLoop() {
-  setInterval(async () => {
-    if (!cameraOn || sending || video.readyState < 2) return;
-    sending = true;
-    try {
-      // drawImage captures the raw (un-mirrored) pixel data regardless of CSS transform
-      cc.drawImage(video, 0, 0, 640, 480);
-      const b64 = cap.toDataURL('image/jpeg', 0.75);
+function startSendLoop(){
+  setInterval(async()=>{
+    if(sending||!video.srcObject||video.readyState<2)return;
+    sending=true;
+    try{
+      cc.drawImage(video,0,0,640,480);
+      const b64=cap.toDataURL('image/jpeg',0.75);
+      frameCount++;
+      if(frameCount<=3)dbg(`Sending frame #${frameCount}…`);
 
-      const res = await fetch('/process', {
-        method:  'POST',
-        headers: {'Content-Type':'application/json'},
-        body:    JSON.stringify({session_id:sid, frame:b64}),
-      });
-      if (res.ok) {
-        latest = await res.json();
-        updateCards(latest);
-        drawWave(latest.wave || []);
-      }
-    } catch(_) {}
-    finally { sending = false; }
-  }, 100);
+      const res=await fetch('/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sid,frame:b64})});
+      if(!res.ok){const t=await res.text();dbg(`Server error ${res.status}: ${t.slice(0,200)}`,'#ef4444');sending=false;return;}
+      const data=await res.json();
+      if(data.error){dbg('Error: '+data.error,'#ef4444');sending=false;return;}
+
+      if(frameCount<=5)dbg(`Frame #${frameCount} OK — face=${data.face_found} bpm=${data.bpm}`);
+      if(frameCount===6)debugBar.style.display='none';
+
+      latest=data;updateCards(data);drawWave(data.wave||[]);
+    }catch(e){dbg('Fetch failed: '+e.message,'#ef4444');}
+    sending=false;
+  },100);
 }
 
-// ── Stat card updates ─────────────────────────────────────────────────────────
-function updateCards(d) {
-  statBpm.textContent = d.bpm ?? '--';
-  const [bB,bG,bR] = d.bpm_color || [80,80,80];
-  statBpm.style.color = d.bpm === '--'
-    ? 'var(--muted)'
-    : `rgb(${bR},${bG},${bB})`;
+function updateCards(d){
+  statBpm.textContent=d.bpm??'--';
+  const[bB,bG,bR]=d.bpm_color||[80,80,80];
+  statBpm.style.color=d.bpm==='--'?'var(--muted)':`rgb(${bR},${bG},${bB})`;
+  if(!d.face_found)      set(statStatus,'No face','var(--red)');
+  else if(d.any_covered) set(statStatus,'ROI covered','var(--red)');
+  else if(d.motion)      set(statStatus,'Moving…','var(--amber)');
+  else if(d.buffer_pct<100)set(statStatus,`Buffer ${d.buffer_pct}%`,'#818cf8');
+  else                   set(statStatus,'● Live','var(--green)');
+  statAlgo.textContent=d.best_algo||'--';
+  statAlgo.style.color=(d.best_algo&&d.best_algo!=='--')?'#60a5fa':'var(--muted)';
+}
+function set(el,txt,col){el.textContent=txt;el.style.color=col;}
 
-  if (!d.face_found) {
-    set(statStatus, 'No face',        'var(--red)');
-  } else if (d.any_covered) {
-    set(statStatus, 'Covered!',       'var(--red)');
-  } else if (d.motion) {
-    set(statStatus, 'Moving',         'var(--amber)');
-  } else if (d.buffer_pct < 100) {
-    set(statStatus, `Buffer ${d.buffer_pct}%`, '#818cf8');
-  } else {
-    set(statStatus, '● Live',         'var(--green)');
+function drawLoop(){oc.clearRect(0,0,overlay.width,overlay.height);if(latest)render(latest);requestAnimationFrame(drawLoop);}
+
+// Flip X: backend returns coords from raw (unmirrored) frame.
+// Video is CSS-mirrored; canvas is NOT — so we flip x = 1-nx.
+function px(nx,ny){return[(1-nx)*overlay.width,ny*overlay.height];}
+
+function render(d){
+  const W=overlay.width,H=overlay.height;
+  if(d.face_found&&d.landmarks?.length){
+    oc.fillStyle='rgba(120,120,200,.35)';
+    for(const[nx,ny]of d.landmarks){const[x,y]=px(nx,ny);oc.beginPath();oc.arc(x,y,1,0,Math.PI*2);oc.fill();}
   }
-
-  const hasAlgo = d.best_algo && d.best_algo !== '--';
-  statAlgo.textContent  = d.best_algo || '--';
-  statAlgo.style.color  = hasAlgo ? '#60a5fa' : 'var(--muted)';
-}
-
-function set(el, txt, col) { el.textContent = txt; el.style.color = col; }
-
-// ── Canvas overlay draw loop ──────────────────────────────────────────────────
-function drawLoop() {
-  oc.clearRect(0, 0, overlay.width, overlay.height);
-  if (latest) renderOverlay(latest);
-  requestAnimationFrame(drawLoop);
-}
-
-// Both video and canvas have CSS scaleX(-1), so backend coords (un-mirrored)
-// map directly onto the canvas local coordinate system — no manual flip needed.
-function px(nx, ny) {
-  return [nx * overlay.width, ny * overlay.height];
-}
-
-function renderOverlay(d) {
-  const W = overlay.width, H = overlay.height;
-
-  // ─ Landmark dots ─
-  if (d.face_found && d.landmarks?.length) {
-    oc.fillStyle = 'rgba(120,120,180,.4)';
-    for (const [nx,ny] of d.landmarks) {
-      const [x,y] = px(nx,ny);
-      oc.beginPath(); oc.arc(x,y,1,0,Math.PI*2); oc.fill();
-    }
-  }
-
-  // ─ ROI polygons ─
-  for (const roi of Object.values(d.rois || {})) {
-    if (!roi.poly?.length) continue;
-    const [bC,gC,rC] = roi.color;
+  for(const roi of Object.values(d.rois||{})){
+    if(!roi.poly?.length)continue;
+    const[bC,gC,rC]=roi.color;
     oc.beginPath();
-    roi.poly.forEach(([nx,ny],i) => {
-      const [x,y] = px(nx,ny);
-      i===0 ? oc.moveTo(x,y) : oc.lineTo(x,y);
-    });
+    roi.poly.forEach(([nx,ny],i)=>{const[x,y]=px(nx,ny);i===0?oc.moveTo(x,y):oc.lineTo(x,y);});
     oc.closePath();
-    oc.fillStyle   = `rgba(${rC},${gC},${bC},.16)`;
-    oc.strokeStyle = `rgba(${rC},${gC},${bC},.85)`;
-    oc.lineWidth   = 1.5;
-    oc.fill(); oc.stroke();
+    oc.fillStyle=`rgba(${rC},${gC},${bC},.16)`;oc.strokeStyle=`rgba(${rC},${gC},${bC},.9)`;oc.lineWidth=1.5;oc.fill();oc.stroke();
   }
-
-  // ─ Status badge top-left ─
-  if (d.face_found) {
-    d.motion
-      ? badge(12, 12, 'MOTION', '#ef4444')
-      : badge(12, 12, 'STABLE', '#10b981');
-  }
-
-  // ─ FPS top-right ─
-  if (d.fps) badge(W-12, 12, `FPS ${d.fps}`, '#50507a', 'right');
-
-  // ─ Pose indicator ─
-  if (d.pose && d.pose !== 'forward') {
-    oc.fillStyle = 'rgba(180,180,210,.6)';
-    oc.font = '11px monospace'; oc.textAlign = 'right';
-    oc.fillText(`Looking ${d.pose}`, W-12, 38);
-  }
-
-  // ─ No-face message ─
-  if (!d.face_found) {
-    oc.fillStyle = 'rgba(239,68,68,.88)';
-    oc.font = 'bold 18px monospace'; oc.textAlign = 'center';
-    oc.fillText('Point camera at your face', W/2, H/2);
-  }
-
-  // ─ Covered warning ─
-  if (d.any_covered) {
-    oc.fillStyle = 'rgba(239,68,68,.9)';
-    oc.font = 'bold 14px monospace'; oc.textAlign = 'center';
-    oc.fillText('ROI Covered — uncover your face', W/2, 48);
-  }
-
-  // ─ Bottom info panel ─
-  drawPanel(d, W, H);
+  if(d.face_found)badge(12,12,d.motion?'MOTION':'STABLE',d.motion?'#f59e0b':'#10b981');
+  if(d.fps)badge(W-12,12,`FPS ${d.fps}`,'#50507a','right');
+  if(d.pose&&d.pose!=='forward'){oc.fillStyle='rgba(180,180,210,.6)';oc.font='11px monospace';oc.textAlign='right';oc.fillText(`Looking ${d.pose}`,W-12,38);}
+  if(!d.face_found){oc.fillStyle='rgba(239,68,68,.9)';oc.font='bold 18px monospace';oc.textAlign='center';oc.fillText('Point camera at your face',W/2,H/2);}
+  if(d.any_covered){oc.fillStyle='rgba(239,68,68,.9)';oc.font='bold 13px monospace';oc.textAlign='center';oc.fillText('ROI Covered — uncover your face',W/2,48);}
+  drawPanel(d,W,H);
 }
 
-function badge(x, y, txt, col, align='left') {
-  oc.font = 'bold 11px monospace'; oc.textAlign = align;
-  const tw = oc.measureText(txt).width;
-  const bx = align==='right' ? x-tw-12 : x;
-  oc.fillStyle = 'rgba(0,0,0,.55)';
-  roundRect(oc, bx-4, y, tw+16, 22, 5); oc.fill();
-  oc.fillStyle = col;
-  oc.fillText(txt, align==='right' ? x-6 : bx+4, y+15);
+function badge(x,y,txt,col,align='left'){
+  oc.font='bold 11px monospace';oc.textAlign=align;
+  const tw=oc.measureText(txt).width,bx=align==='right'?x-tw-12:x;
+  oc.fillStyle='rgba(0,0,0,.6)';rr(oc,bx-4,y,tw+16,22,5);oc.fill();
+  oc.fillStyle=col;oc.fillText(txt,align==='right'?x-6:bx+4,y+15);
 }
 
-function drawPanel(d, W, H) {
-  const pH=92, py=H-pH;
-
-  // Dark panel bg
-  oc.fillStyle = 'rgba(6,6,15,.84)';
-  oc.fillRect(0, py, W, pH);
-
-  // "HEART RATE" label
-  oc.fillStyle='#303055'; oc.font='10px monospace'; oc.textAlign='left';
-  oc.fillText('HEART RATE', 14, py+17);
-
-  // BPM number
-  const [bB,bG,bR] = d.bpm_color||[80,80,80];
-  oc.fillStyle = d.bpm!=='--' ? `rgb(${bR},${bG},${bB})` : '#303055';
-  oc.font = 'bold 42px monospace';
-  oc.fillText(`${d.bpm??'--'} BPM`, 14, py+64);
-
-  // Live / buffering center
-  if (d.buffer_pct < 100) {
-    oc.fillStyle='#b07718'; oc.font='11px monospace'; oc.textAlign='center';
-    oc.fillText(`Buffering ${d.buffer_pct}%`, W/2, py+17);
-  } else {
-    oc.fillStyle='#10b981'; oc.font='bold 12px monospace'; oc.textAlign='center';
-    oc.fillText('● LIVE', W/2, py+17);
+function drawPanel(d,W,H){
+  const pH=92,py=H-pH;
+  oc.fillStyle='rgba(6,6,15,.84)';oc.fillRect(0,py,W,pH);
+  oc.fillStyle='#303055';oc.font='10px monospace';oc.textAlign='left';oc.fillText('HEART RATE',14,py+17);
+  const[bB,bG,bR]=d.bpm_color||[80,80,80];
+  oc.fillStyle=d.bpm!=='--'?`rgb(${bR},${bG},${bB})`:'#303055';
+  oc.font='bold 42px monospace';oc.fillText(`${d.bpm??'--'} BPM`,14,py+64);
+  if(d.buffer_pct<100){oc.fillStyle='#b07718';oc.font='11px monospace';oc.textAlign='center';oc.fillText(`Buffering ${d.buffer_pct}%`,W/2,py+17);}
+  else{oc.fillStyle='#10b981';oc.font='bold 12px monospace';oc.textAlign='center';oc.fillText('● LIVE',W/2,py+17);}
+  if(d.best_algo&&d.best_algo!=='--'){
+    oc.fillStyle='#404060';oc.font='9px monospace';oc.textAlign='left';oc.fillText(`Best: ${d.best_algo}`,14,py+83);
+    let sx=90;for(const[k,v]of Object.entries(d.snr_vals||{})){oc.fillStyle=k===d.best_algo?'#10b981':'#303050';oc.fillText(`${k}=${v}`,sx,py+83);sx+=68;}
   }
-
-  // Algorithm + SNR labels bottom
-  if (d.best_algo && d.best_algo!=='--') {
-    oc.fillStyle='#404060'; oc.font='9px monospace'; oc.textAlign='left';
-    oc.fillText(`Best: ${d.best_algo}`, 14, py+83);
-    let sx=90;
-    for (const [algo,sv] of Object.entries(d.snr_vals||{})) {
-      oc.fillStyle = algo===d.best_algo ? '#10b981' : '#303050';
-      oc.fillText(`${algo}=${sv}`, sx, py+83);
-      sx+=68;
-    }
-  }
-
-  // Mini waveform (right side of panel)
-  if (d.wave?.length > 2) miniWave(d.wave, W-215, py+6, 202, 80);
-
-  // Buffer progress bar
-  const prog = Math.min((d.buffer_pct||0)/100, 1);
-  oc.fillStyle='#101028'; oc.fillRect(0, H-3, W, 3);
-  oc.fillStyle='#3b82f6'; oc.fillRect(0, H-3, W*prog, 3);
+  if(d.wave?.length>2)miniWave(d.wave,W-215,py+6,202,80);
+  const prog=Math.min((d.buffer_pct||0)/100,1);
+  oc.fillStyle='#101028';oc.fillRect(0,H-3,W,3);oc.fillStyle='#3b82f6';oc.fillRect(0,H-3,W*prog,3);
 }
 
-function miniWave(wave, x, y, w, h) {
-  const n = wave.slice(-Math.floor(w));
-  if (n.length<2) return;
-  let mn=Math.min(...n), mx=Math.max(...n);
-  if (mx-mn<1e-8) return;
-  oc.beginPath();
-  oc.strokeStyle='rgba(16,185,129,.88)'; oc.lineWidth=1.5;
-  oc.shadowColor='#10b981'; oc.shadowBlur=5;
-  n.forEach((v,i)=>{
-    const px_ = x+(i/(n.length-1))*w;
-    const py_ = y+h-((v-mn)/(mx-mn))*h;
-    i===0 ? oc.moveTo(px_,py_) : oc.lineTo(px_,py_);
-  });
-  oc.stroke(); oc.shadowBlur=0;
-  oc.fillStyle='#2a2a48'; oc.font='9px monospace'; oc.textAlign='left';
-  oc.fillText('rPPG', x, y+9);
+function miniWave(wave,x,y,w,h){
+  const n=wave.slice(-Math.floor(w));if(n.length<2)return;
+  let mn=Math.min(...n),mx=Math.max(...n);if(mx-mn<1e-8)return;
+  oc.beginPath();oc.strokeStyle='rgba(16,185,129,.88)';oc.lineWidth=1.5;oc.shadowColor='#10b981';oc.shadowBlur=5;
+  n.forEach((v,i)=>{const px_=x+(i/(n.length-1))*w,py_=y+h-((v-mn)/(mx-mn))*h;i===0?oc.moveTo(px_,py_):oc.lineTo(px_,py_);});
+  oc.stroke();oc.shadowBlur=0;
+  oc.fillStyle='#2a2a48';oc.font='9px monospace';oc.textAlign='left';oc.fillText('rPPG',x,y+9);
 }
 
-// ── External waveform card ────────────────────────────────────────────────────
-function drawWave(wave) {
-  const W = waveCanvas.width, H = waveCanvas.height;
-  wc.clearRect(0, 0, W, H);
-  wc.fillStyle = '#0d0d1e'; wc.fillRect(0,0,W,H);
-
-  if (wave.length < 2) {
-    wc.fillStyle='#20203a'; wc.font='11px monospace'; wc.textAlign='center';
-    wc.fillText('Signal will appear after buffering…', W/2, H/2+4);
-    return;
-  }
-
-  const n  = wave.slice(-W);
-  let mn=Math.min(...n), mx=Math.max(...n);
-  if (mx-mn<1e-8) return;
-
-  // Subtle grid
-  wc.strokeStyle='#111128'; wc.lineWidth=1;
-  [.25,.5,.75].forEach(t=>{
-    wc.beginPath(); wc.moveTo(0,H*t); wc.lineTo(W,H*t); wc.stroke();
-  });
-
-  // Signal path
-  wc.beginPath();
-  wc.strokeStyle='#10b981'; wc.lineWidth=2;
-  wc.shadowColor='#10b981'; wc.shadowBlur=7;
-  n.forEach((v,i)=>{
-    const px_= (i/(n.length-1))*W;
-    const py_= H - ((v-mn)/(mx-mn))*(H-10) - 5;
-    i===0 ? wc.moveTo(px_,py_) : wc.lineTo(px_,py_);
-  });
-  wc.stroke(); wc.shadowBlur=0;
+function drawWave(wave){
+  const W=waveCanvas.width,H=waveCanvas.height;
+  wc.clearRect(0,0,W,H);wc.fillStyle='#0d0d1e';wc.fillRect(0,0,W,H);
+  if(wave.length<2){wc.fillStyle='#20203a';wc.font='11px monospace';wc.textAlign='center';wc.fillText('Signal will appear after buffering…',W/2,H/2+4);return;}
+  const n=wave.slice(-W);let mn=Math.min(...n),mx=Math.max(...n);if(mx-mn<1e-8)return;
+  wc.strokeStyle='#1a1a38';wc.lineWidth=1;
+  [.25,.5,.75].forEach(t=>{wc.beginPath();wc.moveTo(0,H*t);wc.lineTo(W,H*t);wc.stroke();});
+  wc.beginPath();wc.strokeStyle='#10b981';wc.lineWidth=2;wc.shadowColor='#10b981';wc.shadowBlur=7;
+  n.forEach((v,i)=>{const px_=(i/(n.length-1))*W,py_=H-((v-mn)/(mx-mn))*(H-10)-5;i===0?wc.moveTo(px_,py_):wc.lineTo(px_,py_);});
+  wc.stroke();wc.shadowBlur=0;
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────────
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x+r, y);
-  ctx.arcTo(x+w, y,   x+w, y+h, r);
-  ctx.arcTo(x+w, y+h, x,   y+h, r);
-  ctx.arcTo(x,   y+h, x,   y,   r);
-  ctx.arcTo(x,   y,   x+w, y,   r);
-  ctx.closePath();
-}
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 </script>
 </body>
 </html>
