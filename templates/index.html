@@ -199,8 +199,22 @@ function px(nx,ny){return[(1-nx)*overlay.width,ny*overlay.height];}
 function render(d){
   const W=overlay.width,H=overlay.height;
   if(d.face_found&&d.landmarks?.length){
-    oc.fillStyle='rgba(120,120,200,.35)';
-    for(const[nx,ny]of d.landmarks){const[x,y]=px(nx,ny);oc.beginPath();oc.arc(x,y,1,0,Math.PI*2);oc.fill();}
+    const lm=d.landmarks;
+    oc.strokeStyle='rgba(120,140,255,.18)';oc.lineWidth=0.7;
+    for(let i=0;i<lm.length;i++){
+      const[x1,y1]=px(lm[i][0],lm[i][1]);
+      for(let j=i+1;j<Math.min(i+4,lm.length);j++){
+        const[x2,y2]=px(lm[j][0],lm[j][1]);
+        if(Math.hypot(x2-x1,y2-y1)<overlay.width*0.12){
+          oc.beginPath();oc.moveTo(x1,y1);oc.lineTo(x2,y2);oc.stroke();
+        }
+      }
+    }
+    for(const[nx,ny]of lm){
+      const[x,y]=px(nx,ny);
+      oc.beginPath();oc.arc(x,y,1.4,0,Math.PI*2);
+      oc.fillStyle='rgba(140,160,255,.55)';oc.fill();
+    }
   }
   for(const roi of Object.values(d.rois||{})){
     if(!roi.poly?.length)continue;
