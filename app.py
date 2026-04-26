@@ -1,4 +1,4 @@
-import os, uuid, time, threading, base64
+import os, cv2, uuid, time, threading, base64
 import numpy as np
 from collections import deque
 from flask import Flask, render_template, request, jsonify
@@ -89,17 +89,19 @@ def pos_signal(R, G, B):
 
 def fft_bpm(s, fps):
     if len(s) < 8:
-        return None, float('-inf')
+        return None, -9999.0
     fv   = np.abs(np.fft.rfft(s)) ** 2
     fr   = np.fft.rfftfreq(len(s), 1.0 / fps)
     mask = (fr >= BPM_LOW / 60.0) & (fr <= BPM_HIGH / 60.0)
     if not mask.any():
-        return None, float('-inf')
+        return None, -9999.0
     peak_hz = fr[mask][np.argmax(fv[mask])]
-    sp = fv[mask].sum()
+    sp  = fv[mask].sum()
     np_ = fv[~mask].sum()
-    snr = sp / np_ if np_ > 1e-12 else float('inf')
-    return float(peak_hz * 60), float(snr)
+    snr = float(sp / np_) if np_ > 1e-12 else 9999.0
+    if not np.isfinite(snr):
+        snr = 9999.0
+    return float(peak_hz * 60), snr
 
 def peaks_bpm(s, fps):
     if len(s) < 10:
@@ -122,7 +124,6 @@ def bpm_color(bpm):
     return [0, 80, 255]
 
 def decode_frame(b64_data):
-    import cv2
     raw   = base64.b64decode(b64_data)
     arr   = np.frombuffer(raw, np.uint8)
     frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -132,9 +133,9 @@ def decode_frame(b64_data):
     small = cv2.resize(frame, (80, 60), interpolation=cv2.INTER_AREA)
     sh, sw = small.shape[:2]
     regions = [
-        small[0:sh//4,          sw//5:4*sw//5],   # forehead
-        small[sh*3//10:sh*13//20, 0:sw//5],        # left cheek
-        small[sh*3//10:sh*13//20, 4*sw//5:],       # right cheek
+        small[0:sh//4,            sw//5:4*sw//5],
+        small[sh*3//10:sh*13//20, 0:sw//5],
+        small[sh*3//10:sh*13//20, 4*sw//5:],
     ]
     regions = [r for r in regions if r.size > 0]
     if not regions:
@@ -144,6 +145,60 @@ def decode_frame(b64_data):
     B = float(np.mean([r[:, :, 0].mean() for r in regions]))
     gray = small[:, :, 1].astype(np.float32)
     return R, G, B, gray, (H, W)
+
+def _face_mesh_landmarks():
+    """Generate ~90 anatomical landmark points for face mesh overlay."""
+    pts = []
+    def add(rx, ry):
+        pts.append([float(np.clip(rx, 0, 1)), float(np.clip(ry, 0, 1))])
+
+    # Face oval (16 pts)
+    for a in np.linspace(0, 2*np.pi, 17)[:-1]:
+        add(0.5 + 0.46*np.sin(a), 0.5 + 0.52*np.cos(a))
+    # Forehead grid
+    for row in [0.06, 0.13, 0.20]:
+        for col in [0.20, 0.35, 0.50, 0.65, 0.80]:
+            add(col, row)
+    # Left eyebrow
+    for t in np.linspace(0, 1, 6):
+        add(0.20 + t*0.22, 0.28 - 0.03*np.sin(t*np.pi))
+    # Right eyebrow
+    for t in np.linspace(0, 1, 6):
+        add(0.58 + t*0.22, 0.28 - 0.03*np.sin(t*np.pi))
+    # Left eye ellipse
+    for a in np.linspace(0, 2*np.pi, 9)[:-1]:
+        add(0.315 + 0.09*np.cos(a), 0.355 + 0.04*np.sin(a))
+    # Right eye ellipse
+    for a in np.linspace(0, 2*np.pi, 9)[:-1]:
+        add(0.685 + 0.09*np.cos(a), 0.355 + 0.04*np.sin(a))
+    # Nose bridge
+    for ry in [0.38, 0.46, 0.54, 0.60]:
+        add(0.50, ry)
+    # Nose wings
+    for t in np.linspace(0, 1, 5):
+        add(0.34 + t*0.32, 0.60 + 0.03*np.sin(t*np.pi))
+    # Upper lip
+    for t in np.linspace(0, 1, 6):
+        add(0.35 + t*0.30, 0.72 - 0.02*np.sin(t*np.pi))
+    # Lower lip
+    for t in np.linspace(0, 1, 5):
+        add(0.36 + t*0.28, 0.80 + 0.02*np.sin(t*np.pi))
+    # Chin
+    for t in np.linspace(0, 1, 5):
+        add(0.38 + t*0.24, 0.90)
+    # Cheeks
+    for row in [0.50, 0.62]:
+        for col in [0.10, 0.18, 0.26]: add(col, row)
+        for col in [0.74, 0.82, 0.90]: add(col, row)
+    return pts
+
+def _sanitize_json(obj):
+    """Recursively replace inf/nan floats that break JSON serialization."""
+    if isinstance(obj, dict):  return {k: _sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):  return [_sanitize_json(v) for v in obj]
+    if isinstance(obj, float):
+        if not np.isfinite(obj): return 9999.0 if obj > 0 else -9999.0
+    return obj
 
 def _process(b64_data, sid, sess):
     now = time.time()
@@ -180,6 +235,7 @@ def _process(b64_data, sid, sess):
 
     out["face_found"] = True
     out["motion"]     = motion
+    out["landmarks"]  = _face_mesh_landmarks()
     out["rois"] = {
         "forehead":    {"poly": [[0.17,0.0],[0.83,0.0],[0.83,0.20],[0.17,0.20]], "covered": False, "color": [0,220,255]},
         "left_cheek":  {"poly": [[0.0,0.45],[0.25,0.45],[0.25,0.70],[0.0,0.70]], "covered": False, "color": [0,255,80]},
@@ -216,7 +272,7 @@ def _process(b64_data, sid, sess):
             "POS":   _bandpass(pos_signal(Rn, Gn, Bn),   fps),
             "GREEN": _bandpass(Gn,                         fps),
         }
-        best_snr  = float('-inf')
+        best_snr  = -9999.0
         best_name = "GREEN"
         snr_vals  = {}
         for name, sig in cands.items():
@@ -271,7 +327,8 @@ def process():
     b64  = raw.split(",")[1] if "," in raw else raw
     sess = _get_session(sid)
     with sess["lock"]:
-        return jsonify(_process(b64, sid, sess))
+        result = _process(b64, sid, sess)
+        return jsonify(_sanitize_json(result))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
